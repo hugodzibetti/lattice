@@ -1,20 +1,25 @@
-name = "hugodzibetti/brickpack"
+name = "hugodzibetti/lattice"
 version = "0.1.0"
-description = "A ultra fast and size effective instance serialization library."
+description = "A blazing fast, size-efficient, backward-compatible Roblox Instance serializer."
 authors = ["hugodzibetti"]
 license = "MIT"
+repository = "https://github.com/hugodzibetti/lattice"
 
 [target]
 environment = "roblox"
+lib = "src/init.luau"
 
 [engines]
-lune = "^0.8.0"
+lune = "0.10.4"
 
 [indices]
 default = "https://github.com/pesde-pkg/index"
 
 [scripts]
-install-packages = "scripts/InstallPackages.luau"
-convert-requires = "scripts/ConvertRequires/init.luau"
+test = "scripts/RunTests.luau"
+generate-artifacts = "scripts/GenerateArtifacts.luau"
 
 [dependencies]
+
+[dev_dependencies]
+frktest = { name = "itsfrank/frktest", version = "^0.0.2", target = "lune" }

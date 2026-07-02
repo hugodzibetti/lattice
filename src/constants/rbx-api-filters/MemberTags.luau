@@ -1,5 +1,0 @@
-return {
-    "Deprecated",
-    "ReadOnly",
-    "NotScriptable"
-}
