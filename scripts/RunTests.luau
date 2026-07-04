@@ -16,6 +16,7 @@ require("@tests/SerdePrimitives.spec")()
 require("@tests/SerdeUDim.spec")()
 require("@tests/SerdeUniqueId.spec")()
 require("@tests/SerdeVector.spec")()
+require("@tests/Artifact.spec")()
 
 local lune_console_reporter = (frktest :: any)._reporters.lune_console_reporter
 lune_console_reporter.init()
