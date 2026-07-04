@@ -18,9 +18,9 @@ local colorSequenceKeypoint: types.Codec<ColorSequenceKeypoint> = {
 	write = function(writer: Writer.Writer, value: ColorSequenceKeypoint)
 		writer:f32(value.Time)
 		local color = value.Value
-		writer:u8(round(color.R * 255))
-		writer:u8(round(color.G * 255))
-		writer:u8(round(color.B * 255))
+		writer:u8(math.clamp(round(color.R * 255), 0, 255))
+		writer:u8(math.clamp(round(color.G * 255), 0, 255))
+		writer:u8(math.clamp(round(color.B * 255), 0, 255))
 	end,
 
 	read = function(reader: Reader.Reader): ColorSequenceKeypoint

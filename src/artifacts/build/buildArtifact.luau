@@ -8,6 +8,7 @@ local Writer = require("@src/buffer/Writer")
 local serde = require("@src/serde")
 local Types = require("@src/artifacts/types")
 local resolveType = require("@src/artifacts/build/resolveType")
+local getCodec = require("@src/artifacts/getCodec")
 
 type ClassDef = Types.ClassDef
 type PropertyDef = Types.PropertyDef
@@ -28,7 +29,7 @@ local function parseDefault(raw: string, prop: PropertyDef): any?
 	local vt = prop.valueType
 
 	-- Simple types
-	if vt == "float" or vt == "double" or vt == "int64" then
+	if vt == "float" or vt == "double" or vt == "int64" or vt == "int" then
 		return tonumber(raw)
 	elseif vt == "bool" or vt == "boolean" then
 		return raw == "true"
@@ -42,7 +43,7 @@ local function parseDefault(raw: string, prop: PropertyDef): any?
 	-- Vector2: "x, y"
 	if vt == "Vector2" then
 		local parts = {}
-		for part in raw:gmatch("[%d%.%-]+") do
+		for part in raw:gmatch("[%d%.%-%+eE]+") do
 			table.insert(parts, tonumber(part))
 		end
 		if #parts >= 2 then
@@ -54,7 +55,7 @@ local function parseDefault(raw: string, prop: PropertyDef): any?
 	-- Vector3: "x, y, z"
 	if vt == "Vector3" then
 		local parts = {}
-		for part in raw:gmatch("[%d%.%-]+") do
+		for part in raw:gmatch("[%d%.%-%+eE]+") do
 			table.insert(parts, tonumber(part))
 		end
 		if #parts >= 3 then
@@ -66,7 +67,7 @@ local function parseDefault(raw: string, prop: PropertyDef): any?
 	-- CFrame: 12 numbers (pos + rotation matrix)
 	if vt == "CFrame" then
 		local parts = {}
-		for part in raw:gmatch("[%d%.%-]+") do
+		for part in raw:gmatch("[%d%.%-%+eE]+") do
 			table.insert(parts, tonumber(part))
 		end
 		if #parts >= 12 then
@@ -80,7 +81,7 @@ local function parseDefault(raw: string, prop: PropertyDef): any?
 	-- Color3: "r, g, b" (0-1 range)
 	if vt == "Color3" then
 		local parts = {}
-		for part in raw:gmatch("[%d%.%-]+") do
+		for part in raw:gmatch("[%d%.%-%+eE]+") do
 			table.insert(parts, tonumber(part))
 		end
 		if #parts >= 3 then
@@ -103,7 +104,7 @@ local function parseDefault(raw: string, prop: PropertyDef): any?
 	-- UDim: "scale, offset"
 	if vt == "UDim" then
 		local parts = {}
-		for part in raw:gmatch("[%d%.%-]+") do
+		for part in raw:gmatch("[%d%.%-%+eE]+") do
 			table.insert(parts, tonumber(part))
 		end
 		if #parts >= 2 then
@@ -115,7 +116,7 @@ local function parseDefault(raw: string, prop: PropertyDef): any?
 	-- UDim2: "xScale, xOffset, yScale, yOffset"
 	if vt == "UDim2" then
 		local parts = {}
-		for part in raw:gmatch("[%d%.%-]+") do
+		for part in raw:gmatch("[%d%.%-%+eE]+") do
 			table.insert(parts, tonumber(part))
 		end
 		if #parts >= 4 then
@@ -127,7 +128,7 @@ local function parseDefault(raw: string, prop: PropertyDef): any?
 	-- Rect: "minX, minY, maxX, maxY"
 	if vt == "Rect" then
 		local parts = {}
-		for part in raw:gmatch("[%d%.%-]+") do
+		for part in raw:gmatch("[%d%.%-%+eE]+") do
 			table.insert(parts, tonumber(part))
 		end
 		if #parts >= 4 then
@@ -138,27 +139,13 @@ local function parseDefault(raw: string, prop: PropertyDef): any?
 
 	-- Enum: numeric enum value
 	if vt == "Enum" then
-		local ok, result = pcall(function()
-			local num = tonumber(raw)
-			if num and prop.valueTypeParams and #prop.valueTypeParams > 0 then
-				local enumName = prop.valueTypeParams[1]
-				local enumObj = (roblox.Enum :: any)[enumName]
-				if enumObj then
-					return (enumObj :: any).fromValue(num)
-				end
-			end
-			return nil
-		end)
-		if ok then
-			return result
-		end
-		return nil
+		return tonumber(raw)
 	end
 
 	-- NumberRange: "min, max"
 	if vt == "NumberRange" then
 		local parts = {}
-		for part in raw:gmatch("[%d%.%-]+") do
+		for part in raw:gmatch("[%d%.%-%+eE]+") do
 			table.insert(parts, tonumber(part))
 		end
 		if #parts >= 2 then
@@ -187,21 +174,6 @@ local function parseDefault(raw: string, prop: PropertyDef): any?
 	return nil
 end
 
-local function getCodec(codecId: number, codecParams: { number }?): any
-	if codecId == 4 or codecId == 5 then
-		local factory = serde.codecIdToFactory[codecId]
-		if not factory or not codecParams or #codecParams == 0 then
-			return nil
-		end
-		local innerCodec = serde.codecIdToModule[codecParams[1]]
-		if not innerCodec then
-			return nil
-		end
-		return factory(innerCodec)
-	end
-	return serde.codecIdToModule[codecId]
-end
-
 -- Internal: serialize default value to bytes using its codec.
 local function serializeDefault(value: any?, codecId: number, codecParams: { number }?): buffer
 	if value == nil then
@@ -228,6 +200,11 @@ local function buildArtifact(classDefs: { ClassDef }): buffer
 		return a.name < b.name
 	end)
 
+	local classNamesSet: { [string]: boolean } = {}
+	for _, cd in classDefs do
+		classNamesSet[cd.name] = true
+	end
+
 	local classMetas: { ClassMetadata } = {}
 	local classId = 0
 
@@ -236,7 +213,7 @@ local function buildArtifact(classDefs: { ClassDef }): buffer
 		local props: { PropertyMetadata } = {}
 
 		for _, pd in cd.properties do
-			local resolved = resolveType(pd)
+			local resolved = resolveType(pd, classNamesSet)
 			if not resolved then
 				warn(string.format("WARNING: %s.%s (%s) — no codec, skipping", cd.name, pd.name, pd.valueType))
 				continue

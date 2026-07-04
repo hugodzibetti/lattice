@@ -28,6 +28,17 @@ return function()
 			check.equal(tostring(result), tostring(value))
 		end)
 
+		test.case("pins wire format of UniqueId.null", function()
+			local value = roblox.UniqueId.null
+			local w = Writer.new()
+			uniqueId.write(w, value)
+			local buf = w:toBuffer()
+			check.equal(buffer.len(buf), 16)
+			for i = 0, 15 do
+				check.equal(buffer.readu8(buf, i), 0)
+			end
+		end)
+
 		test.case("distinct UniqueIds stay distinct after round trip", function()
 			local a = roblox.UniqueId.new()
 			local b = roblox.UniqueId.new()

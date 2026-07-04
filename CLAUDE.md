@@ -28,12 +28,14 @@ lune run tests/_scratch_run.luau  # see tests/*.spec.luau for pattern
 ### Three layers
 
 **Buffer I/O (`src/buffer/`)**
+
 - `Writer.luau`: growable binary writer. Wraps Luau's `buffer` type with auto-doubling capacity.
   - Methods: `u8/u16/u32`, `i8/i16/i32`, `f32/f64`, `bool`, `varint` (unsigned LEB128), `varintSigned` (zigzag), `string`, `bytes`.
   - Key insight: varint is used for counts, ids, indices; small numbers compress to 1 byte.
 - `Reader.luau`: mirrors Writer exactly. Tracks position; exposes `remaining()`.
 
 **Codecs (`src/serde/`)**
+
 - All 26+ modules (e.g. `f32.luau`, `cframe.luau`, `enumItem.luau`) implement the `Codec<T>` interface:
   ```luau
   export type Codec<T> = {
@@ -45,6 +47,7 @@ lune run tests/_scratch_run.luau  # see tests/*.spec.luau for pattern
 - **Exception**: combinators (`array.luau`, `option.luau`) are factories: `array(elemCodec) -> Codec<{T}>`.
 
 **Serialization patterns**
+
 - **No per-value type tags in property blocks**: the artifact (build-time metadata) already knows types. Codecs run without branching.
 - **Default-value elision**: instance layer compares `value == artifactDefault` directly; codecs never see defaults.
 - **Float precision**: f32 for bulk numeric properties (position, size, scale); f64 only where required (override flag in artifact, not yet built).
@@ -55,17 +58,20 @@ lune run tests/_scratch_run.luau  # see tests/*.spec.luau for pattern
 ### Testing
 
 **Patterns**:
+
 - Unit tests are round-trip: serialize value → read back → assert equality.
 - Tests for Roblox types use `require("@lune/roblox")` (Lune's built-in binding; works standalone, no place file needed).
 - For generic combinators (array, option), tests include an inline dummy codec to avoid cross-PR dependencies.
 
 **Running**:
+
 - `pesde run test` loads all specs and runs them via frktest's lune reporter.
 - Current `scripts/RunTests.luau` only loads `Buffer.spec`; integration step (post-batch) will wire all 14 new specs.
 
 ## Require Aliases
 
 Defined in `.luaurc`:
+
 ```json
 "aliases": {
   "src": "src",
@@ -91,10 +97,18 @@ Use `@src/buffer/Writer`, `@packages/frktest`, `@tests/SomeName` everywhere. Thi
 4. **Columnar/SoA for class blocks**: (future) instances grouped by class, properties stored as columns, enables compression and delta encoding.
 5. **Backward compat via versioned schema**: files include schemaVersion in header; translation maps in `compat/` will handle API-dump changes (not yet built).
 
-## Next Steps After Phase 2 (Codecs)
+## Design Docs
 
-1. **Artifact system** (`src/artifacts/`): pre-compute class metadata (properties, defaults, codec ids, bitmask layouts) from Roblox API dump.
-2. **Format/Container** (`src/format/`): header, string table, tag table, columnar class blocks.
+- `docs/superpowers/specs/2026-07-02-codec-benchmarks-design.md` — codec design & benchmarks
+- `docs/superpowers/specs/2026-07-04-artifact-system-design.md` — artifact system design ✅ (fully implemented)
+- `docs/superpowers/specs/2026-07-04-format-layer-design.md` — format container, columnar layout, bitmasks, RLE
+- `docs/glossary.md` — terminology reference (varint, bitmask, RLE, columnar, etc.)
+- `docs/examples/` — supplementary examples (varint, bitmask, RLE, columnar-vs-row, format-binary)
+
+## Next Steps
+
+1. ~~**Artifact system**~~ ✅ Done — `src/artifacts/` is fully functional.
+2. **Format/Container** (`src/format/`): header, string table, tag table, columnar class blocks with per-column encoding (raw, RLE). See `docs/superpowers/specs/2026-07-04-format-layer-design.md`.
 3. **Instance layer** (`src/instance/`): traverse → index, serialize/deserialize, optimize (default elision, dedup, template detection).
 4. **Compat system** (`src/compat/`): versioned schema registry + translation maps for future-proofing.
 5. **Integration**: wire all specs into `scripts/RunTests.luau`, create central serde registry in `src/serde/init.luau`.

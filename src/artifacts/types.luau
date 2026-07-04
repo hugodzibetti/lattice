@@ -5,6 +5,7 @@ export type PropertyMetadata = {
 	codecId: number,
 	codecParams: { number }?,
 	default: any?,
+	codec: any?,
 }
 
 export type ClassMetadata = {

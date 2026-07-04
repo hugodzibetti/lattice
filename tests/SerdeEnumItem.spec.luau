@@ -10,26 +10,23 @@ local enumItem = require("@src/serde/enumItem")
 
 return function()
 	test.suite("serde.enumItem", function()
-		test.case("round trips Material items", function()
-			local codec = enumItem(roblox.Enum.Material)
-			local values = { roblox.Enum.Material.Plastic, roblox.Enum.Material.Wood, roblox.Enum.Material.Neon }
+		test.case("round trips Material values", function()
+			local values = { roblox.Enum.Material.Plastic.Value, roblox.Enum.Material.Wood.Value, roblox.Enum.Material.Neon.Value }
 			for _, value in values do
 				local w = Writer.new()
-				codec.write(w, value)
+				enumItem.write(w, value)
 				local r = Reader.new(w:toBuffer())
-				check.equal(codec.read(r), value)
+				check.equal(enumItem.read(r), value)
 			end
 		end)
 
-		test.case("is generic across different enums", function()
-			local keyCodeCodec = enumItem(roblox.Enum.KeyCode)
-			local values = { roblox.Enum.KeyCode.A, roblox.Enum.KeyCode.Space }
-			for _, value in values do
-				local w = Writer.new()
-				keyCodeCodec.write(w, value)
-				local r = Reader.new(w:toBuffer())
-				check.equal(keyCodeCodec.read(r), value)
-			end
+		test.case("round trips value = 0", function()
+			local value = roblox.Enum.HumanoidStateType.FallingDown.Value
+			check.equal(value, 0)
+			local w = Writer.new()
+			enumItem.write(w, value)
+			local r = Reader.new(w:toBuffer())
+			check.equal(enumItem.read(r), value)
 		end)
 	end)
 end

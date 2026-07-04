@@ -14,6 +14,9 @@ local function write(writer: Writer.Writer, value: BrickColor)
 	writer:varint(value.Number)
 end
 
+-- Note: BrickColor.new(n) falls back to "Medium stone grey" for
+-- unrecognized palette indices rather than erroring. Treat unexpected
+-- colors after deserialization as a sign of a corrupt/mismatched buffer.
 local function read(reader: Reader.Reader): BrickColor
 	return roblox.BrickColor.new(reader:varint())
 end

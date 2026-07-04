@@ -17,8 +17,10 @@ local content: types.Codec<Content> = {
 		if value.SourceType == ContentSourceType.Uri then
 			writer:u8(1)
 			writer:string(value.Uri)
-		else
+		elseif value.SourceType == ContentSourceType.None then
 			writer:u8(0)
+		else
+			error(`content codec: unsupported SourceType '{value.SourceType}'`)
 		end
 	end,
 

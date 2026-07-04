@@ -19,6 +19,7 @@ local LEAF_MAP: { [string]: number } = {
 	float = 0,
 	double = 1,
 	int64 = 1,
+	int = 1,
 	bool = 2,
 	boolean = 2,
 	string = 3,
@@ -46,7 +47,7 @@ local function resolveLeaf(typeName: string): number?
 	return LEAF_MAP[typeName]
 end
 
-local function resolveType(prop: { valueType: string, valueTypeParams: { string }? }): ResolvedType?
+local function resolveType(prop: { valueType: string, valueTypeParams: { string }? }, classNamesSet: { [string]: boolean }?): ResolvedType?
 	local valueType = prop.valueType
 	local params = prop.valueTypeParams
 
@@ -70,6 +71,10 @@ local function resolveType(prop: { valueType: string, valueTypeParams: { string 
 	local codecId = resolveLeaf(valueType)
 	if codecId then
 		return { codecId = codecId }
+	end
+
+	if valueType == "Instance" or (classNamesSet and classNamesSet[valueType]) then
+		return { codecId = 26 }
 	end
 
 	return nil

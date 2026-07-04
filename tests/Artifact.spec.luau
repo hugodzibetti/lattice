@@ -224,7 +224,7 @@ return function()
 			check.equal(result[1].properties[1].name, "RealProp")
 		end)
 
-		test.case("BinaryString and Instance value types are skipped", function()
+		test.case("BinaryString is skipped, Instance value types are mapped to referent", function()
 			local raw = {
 				Classes = {
 					{
@@ -251,8 +251,9 @@ return function()
 			}
 			local result = parseDump(raw)
 			check.equal(#result, 1)
-			check.equal(#result[1].properties, 1)
-			check.equal(result[1].properties[1].name, "GoodProp")
+			check.equal(#result[1].properties, 2)
+			check.equal(result[1].properties[1].name, "Child")
+			check.equal(result[1].properties[2].name, "GoodProp")
 		end)
 	end)
 
@@ -334,10 +335,12 @@ return function()
 			check.equal(part.properties[1].name, "Anchored")
 			check.equal(part.properties[1].codecId, 2)
 			check.equal(part.properties[1].default, true)
+			check.equal(part.properties[1].codec, serde.codecIdToModule[2])
 
 			check.equal(part.properties[2].name, "Position")
 			check.equal(part.properties[2].codecId, 17)
 			check.equal(part.properties[2].default, roblox.Vector3.new(0, 0, 0))
+			check.equal(part.properties[2].codec, serde.codecIdToModule[17])
 
 			-- Class "Model"
 			local model = artifact.classByName["Model"]
@@ -346,6 +349,7 @@ return function()
 			check.equal(model.properties[1].name, "Scale")
 			check.equal(model.properties[1].codecId, 0)
 			check.equal(model.properties[1].default, 1.0)
+			check.equal(model.properties[1].codec, serde.codecIdToModule[0])
 
 			-- classById lookups
 			check.equal(artifact.classById[1].name, "Part")

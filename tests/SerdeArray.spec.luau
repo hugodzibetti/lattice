@@ -47,6 +47,15 @@ return function()
 			end
 		end)
 
+		test.case("large array with 128+ elements (varint boundary)", function()
+			local value = table.create(150, 4.5)
+			local result = roundTrip(numberArray, value)
+			check.equal(#result, #value)
+			for i, v in value do
+				check.equal(result[i], v)
+			end
+		end)
+
 		test.case("composes with itself: array of arrays", function()
 			local nested = array(numberArray)
 			local value = { { 1, 2 }, {}, { 3 } }

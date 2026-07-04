@@ -17,7 +17,8 @@ default = "https://github.com/pesde-pkg/index"
 
 [scripts]
 test = "scripts/RunTests.luau"
-generate-artifacts = "scripts/GenerateArtifacts.luau"
+artifact = "src/artifacts/build/Run.luau"
+roundtrip = "scripts/RoundTrip.luau"
 
 [dependencies]
 

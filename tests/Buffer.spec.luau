@@ -34,7 +34,7 @@ return function()
 		end)
 
 		test.case("varint round trip (small and large)", function()
-			local values = { 0, 1, 127, 128, 300, 16384, 2097151, 2097152, 268435455, 999999999 }
+			local values = { 0, 1, 127, 128, 300, 16384, 2097151, 2097152, 268435455, 999999999, 2^28 }
 			local w = Writer.new()
 			for _, v in values do
 				w:varint(v)
@@ -44,6 +44,23 @@ return function()
 			for _, v in values do
 				check.equal(r:varint(), v)
 			end
+		end)
+
+		test.case("varint limit validation (2^34 succeeds, 2^35 fails)", function()
+			-- 2^34 fits in 5 bytes of varint
+			local w1 = Writer.new()
+			w1:varint(2^34)
+			local r1 = Reader.new(w1:toBuffer())
+			check.equal(r1:varint(), 2^34)
+
+			-- 2^35 requires 6 bytes, violating the 5-byte loop limit on read
+			local w2 = Writer.new()
+			w2:varint(2^35)
+			local r2 = Reader.new(w2:toBuffer())
+			local success = pcall(function()
+				r2:varint()
+			end)
+			check.equal(success, false)
 		end)
 
 		test.case("varintSigned round trip (positive, negative, zero)", function()
@@ -111,6 +128,33 @@ return function()
 			check.equal(r:f32(), 2.5)
 			check.equal(r:bool(), true)
 			check.equal(r:remaining(), 0)
+		end)
+
+		test.case("Reader:remaining decrements correctly", function()
+			local w = Writer.new()
+			w:u8(1)
+			w:u16(2)
+			w:u32(3)
+
+			local r = Reader.new(w:toBuffer())
+			check.equal(r:remaining(), 7)
+			r:u8()
+			check.equal(r:remaining(), 6)
+			r:u16()
+			check.equal(r:remaining(), 4)
+			r:u32()
+			check.equal(r:remaining(), 0)
+		end)
+
+		test.case("Reader OOB throws error", function()
+			local w = Writer.new()
+			w:u8(42)
+			local r = Reader.new(w:toBuffer())
+			r:u8()
+			local success = pcall(function()
+				r:u8()
+			end)
+			check.equal(success, false)
 		end)
 	end)
 end

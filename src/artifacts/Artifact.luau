@@ -3,27 +3,14 @@
 --!optimize 2
 
 local Reader = require("@src/buffer/Reader")
-local serde = require("@src/serde")
 local Types = require("@src/artifacts/types")
+local getCodec = require("@src/artifacts/getCodec")
 
 type PropertyMetadata = Types.PropertyMetadata
 type ClassMetadata = Types.ClassMetadata
 type ArtifactData = Types.ArtifactData
 
-local function getCodec(codecId: number, codecParams: { number }?): any?
-	if codecId == 4 or codecId == 5 then
-		local factory = serde.codecIdToFactory[codecId]
-		if not factory or not codecParams or #codecParams == 0 then
-			return nil
-		end
-		local innerCodec = serde.codecIdToModule[codecParams[1]]
-		if not innerCodec then
-			return nil
-		end
-		return factory(innerCodec)
-	end
-	return serde.codecIdToModule[codecId]
-end
+local CURRENT_VERSION = 1
 
 local function load(artifactBuffer: buffer): ArtifactData
 	local r = Reader.new(artifactBuffer)
@@ -37,15 +24,20 @@ local function load(artifactBuffer: buffer): ArtifactData
 
 	-- Version
 	local version = r:u16()
-	assert(version == 1, "Unsupported artifact version: " .. tostring(version))
+	assert(version >= 1 and version <= CURRENT_VERSION, "Unsupported artifact version: " .. tostring(version))
 
 	local classCount = r:varint()
 	local classes: { ClassMetadata } = {}
 	local classByName: { [string]: ClassMetadata } = {}
 	local classById: { [number]: ClassMetadata } = {}
 
+	local seenClassIds = {}
+
 	for _ = 1, classCount do
 		local classId = r:varint()
+		assert(not seenClassIds[classId], "Duplicate class ID in artifact: " .. tostring(classId))
+		seenClassIds[classId] = true
+
 		local className = r:string()
 		local propCount = r:varint()
 		local properties: { PropertyMetadata } = {}
@@ -54,7 +46,7 @@ local function load(artifactBuffer: buffer): ArtifactData
 			local propName = r:string()
 			local codecId = r:varint()
 
-			local paramCount = r:varint()
+https://github.com/monil-patel/vscode-keyboard-shortcut-exthttps://github.com/monil-patel/vscode-keyboard-shortcut-ext			local paramCount = r:varint()
 			local codecParams: { number }? = nil
 			if paramCount > 0 then
 				codecParams = {}
@@ -63,11 +55,11 @@ local function load(artifactBuffer: buffer): ArtifactData
 				end
 			end
 
+			local codec = getCodec(codecId, codecParams)
 			local defaultLen = r:varint()
 			local defaultVal: any? = nil
 			if defaultLen > 0 then
 				local defaultBytes = r:bytes(defaultLen)
-				local codec = getCodec(codecId, codecParams)
 				if codec then
 					local ok, val = pcall(function()
 						local dr = Reader.new(defaultBytes)
@@ -75,7 +67,11 @@ local function load(artifactBuffer: buffer): ArtifactData
 					end)
 					if ok then
 						defaultVal = val
+					else
+						warn(string.format("Failed to decode default value for property %s in class %s: %s", propName, className, tostring(val)))
 					end
+				else
+					warn(string.format("Codec not found for property %s in class %s", propName, className))
 				end
 			end
 
@@ -84,6 +80,7 @@ local function load(artifactBuffer: buffer): ArtifactData
 				codecId = codecId,
 				codecParams = codecParams,
 				default = defaultVal,
+				codec = codec,
 			})
 		end
 

@@ -94,15 +94,18 @@ function Reader.varint(self: Reader): number
 	local pos = self._pos
 	local result = 0
 	local shift = 1
-	while true do
+	local terminated = false
+	for _ = 1, 5 do
 		local byte = readu8(buf, pos)
 		pos += 1
 		result += (byte % 128) * shift
 		if byte < 128 then
+			terminated = true
 			break
 		end
 		shift *= 128
 	end
+	assert(terminated, "Reader.varint: malformed varint (too many bytes / not terminated)")
 	self._pos = pos
 	return result
 end

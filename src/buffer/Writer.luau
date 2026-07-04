@@ -112,6 +112,7 @@ end
 -- Unsigned LEB128. Small values (the common case for ids/counts/indices)
 -- cost a single byte.
 function Writer.varint(self: Writer, value: number)
+	assert(value >= 0 and value < math.huge, "value must be a non-negative finite number")
 	reserve(self, 10)
 	local buf = self._buf
 	local pos = self._len
@@ -139,10 +140,24 @@ end
 
 function Writer.string(self: Writer, value: string)
 	local n = #value
-	self:varint(n)
-	reserve(self, n)
-	writestring(self._buf, self._len, value, n)
-	self._len += n
+	reserve(self, 10 + n)
+	local buf = self._buf
+	local pos = self._len
+	local v = n
+	while true do
+		local byte = v % 128
+		v = (v - byte) // 128
+		if v > 0 then
+			writeu8(buf, pos, byte + 128)
+			pos += 1
+		else
+			writeu8(buf, pos, byte)
+			pos += 1
+			break
+		end
+	end
+	writestring(buf, pos, value, n)
+	self._len = pos + n
 end
 
 -- Writes raw bytes without a length prefix (caller tracks length via schema).

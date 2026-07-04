@@ -28,6 +28,7 @@ local font = require("@src/serde/font")
 local content = require("@src/serde/content")
 local uniqueId = require("@src/serde/uniqueId")
 local enumItem = require("@src/serde/enumItem")
+local referent = require("@src/serde/referent")
 
 type Codec<T> = Types.Codec<T>
 type CodecFactory = (Codec<any>) -> Codec<any>
@@ -57,6 +58,7 @@ local codecIdToModule: { [number]: Codec<any> } = {
 	[23] = content :: Codec<any>,
 	[24] = uniqueId :: Codec<any>,
 	[25] = enumItem :: Codec<any>,
+	[26] = referent :: Codec<any>,
 }
 
 local codecIdToFactory: { [number]: CodecFactory } = {
@@ -91,6 +93,7 @@ local codecNameToId: { [string]: number } = {
 	content = 23,
 	uniqueId = 24,
 	enumItem = 25,
+	referent = 26,
 }
 
 export type SerdeRegistry = {

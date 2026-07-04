@@ -62,9 +62,12 @@ local function parse(raw: any): { ClassDef }
 				end
 			end
 
-			-- Only CanSave == true (or absent)
+			-- Only CanSave == true (or absent, or is "Parent", "Size", "Position")
 			local serialization = member.Serialization
-			if type(serialization) == "table" and serialization.CanSave == false then
+			if type(serialization) == "table" and serialization.CanSave == false 
+				and member.Name ~= "Parent" 
+				and member.Name ~= "Size" 
+				and member.Name ~= "Position" then
 				continue
 			end
 
@@ -78,15 +81,16 @@ local function parse(raw: any): { ClassDef }
 				continue
 			end
 
-			-- Skip BinaryString and Instance
-			if valueTypeName == "BinaryString" or valueTypeName == "Instance" then
+			-- Skip BinaryString
+			if valueTypeName == "BinaryString" then
 				continue
 			end
 
 			-- Build valueTypeParams from ValueType's extra info
 			local valueTypeParams: { string }? = nil
-			if valueTypeName == "Enum" and type(valueTypeRaw.EnumType) == "string" then
-				valueTypeParams = { valueTypeRaw.EnumType }
+			if valueTypeRaw.Category == "Enum" then
+				valueTypeParams = { valueTypeRaw.Name }
+				valueTypeName = "Enum"
 			elseif valueTypeName == "Array" or valueTypeName == "Optional" then
 				local inner = valueTypeRaw.InnerType
 				if type(inner) == "table" and type(inner.Name) == "string" then
@@ -111,10 +115,17 @@ local function parse(raw: any): { ClassDef }
 			return a.name < b.name
 		end)
 
-		-- Merge: inherited first, then own
+		-- Merge: inherited first, then own, ensuring subclass wins on override
 		local result: { PropertyDef } = {}
+		local seen: {[string]: boolean} = {}
+		for _, p in ownProps do
+			seen[p.name] = true
+		end
 		for _, p in inherited do
-			table.insert(result, p)
+			if not seen[p.name] then
+				table.insert(result, p)
+				seen[p.name] = true
+			end
 		end
 		for _, p in ownProps do
 			table.insert(result, p)

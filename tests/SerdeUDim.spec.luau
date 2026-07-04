@@ -17,6 +17,8 @@ return function()
 				roblox.UDim.new(0, 0),
 				roblox.UDim.new(0.5, 10),
 				roblox.UDim.new(1, -20),
+				roblox.UDim.new(0, 500),
+				roblox.UDim.new(0, -500),
 			}
 			for _, value in cases do
 				local w = Writer.new()

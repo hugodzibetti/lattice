@@ -11,16 +11,14 @@ local Font = roblox.Font
 local FontWeight = roblox.Enum.FontWeight
 local FontStyle = roblox.Enum.FontStyle
 
--- Lune's Enum has no `FromValue` lookup, so resolve by scanning. FontWeight
--- values go up to 900 (Heavy), so it needs a varint, not a u8; FontStyle only
--- has Normal/Italic and fits in a u8.
-local function findByValue(enum: Enum, value: number): EnumItem
-	for _, item in enum:GetEnumItems() do
-		if item.Value == value then
-			return item
-		end
-	end
-	error(`no enum item on {tostring(enum)} with value {value}`)
+local weightsByValue: { [number]: EnumItem } = {}
+for _, item in FontWeight:GetEnumItems() do
+	weightsByValue[item.Value] = item
+end
+
+local stylesByValue: { [number]: EnumItem } = {}
+for _, item in FontStyle:GetEnumItems() do
+	stylesByValue[item.Value] = item
 end
 
 local font: types.Codec<Font> = {
@@ -32,8 +30,12 @@ local font: types.Codec<Font> = {
 
 	read = function(reader: Reader.Reader): Font
 		local family = reader:string()
-		local weight = findByValue(FontWeight, reader:varint())
-		local style = findByValue(FontStyle, reader:u8())
+		local wVal = reader:varint()
+		local weight = weightsByValue[wVal]
+		assert(weight, `no enum item on FontWeight with value {wVal}`)
+		local sVal = reader:u8()
+		local style = stylesByValue[sVal]
+		assert(style, `no enum item on FontStyle with value {sVal}`)
 		return Font.new(family, weight :: any, style :: any)
 	end,
 }

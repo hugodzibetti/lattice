@@ -24,6 +24,26 @@ return function()
 				check.equal(f32.read(r), v)
 			end
 		end)
+
+		test.case("round trip NaN, Inf, -Inf, -0", function()
+			local w = Writer.new()
+			f32.write(w, math.huge)
+			f32.write(w, -math.huge)
+			f32.write(w, -0)
+
+			local r = Reader.new(w:toBuffer())
+			check.equal(f32.read(r), math.huge)
+			check.equal(f32.read(r), -math.huge)
+			local negZero = f32.read(r)
+			check.equal(negZero, 0)
+			check.equal(1 / negZero, -math.huge)
+
+			local wNan = Writer.new()
+			f32.write(wNan, 0/0)
+			local rNan = Reader.new(wNan:toBuffer())
+			local nanResult = f32.read(rNan)
+			check.is_true(nanResult ~= nanResult)
+		end)
 	end)
 
 	test.suite("serde.f64", function()
@@ -38,6 +58,26 @@ return function()
 			for _, v in values do
 				check.equal(f64.read(r), v)
 			end
+		end)
+
+		test.case("round trip NaN, Inf, -Inf, -0", function()
+			local w = Writer.new()
+			f64.write(w, math.huge)
+			f64.write(w, -math.huge)
+			f64.write(w, -0)
+
+			local r = Reader.new(w:toBuffer())
+			check.equal(f64.read(r), math.huge)
+			check.equal(f64.read(r), -math.huge)
+			local negZero = f64.read(r)
+			check.equal(negZero, 0)
+			check.equal(1 / negZero, -math.huge)
+
+			local wNan = Writer.new()
+			f64.write(wNan, 0/0)
+			local rNan = Reader.new(wNan:toBuffer())
+			local nanResult = f64.read(rNan)
+			check.is_true(nanResult ~= nanResult)
 		end)
 	end)
 

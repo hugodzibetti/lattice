@@ -38,6 +38,21 @@ return function()
 			local result = font.read(r)
 			check.equal(result.Weight, value.Weight)
 		end)
+
+		test.case("round trip Arial Regular normal (most common real-world case)", function()
+			local value = roblox.Font.new(
+				"rbxasset://fonts/families/Arial.json",
+				roblox.Enum.FontWeight.Regular,
+				roblox.Enum.FontStyle.Normal
+			)
+			local w = Writer.new()
+			font.write(w, value)
+			local r = Reader.new(w:toBuffer())
+			local result = font.read(r)
+			check.equal(result.Family, value.Family)
+			check.equal(result.Weight, value.Weight)
+			check.equal(result.Style, value.Style)
+		end)
 	end)
 
 	test.suite("serde.content", function()
@@ -58,6 +73,27 @@ return function()
 			local result = content.read(r)
 			check.equal(result.SourceType, value.SourceType)
 			check.equal(result.Uri, value.Uri)
+		end)
+
+		test.case("round trip Content.fromUri with empty URI", function()
+			local value = roblox.Content.fromUri("")
+			local w = Writer.new()
+			content.write(w, value)
+			local r = Reader.new(w:toBuffer())
+			local result = content.read(r)
+			check.equal(result.SourceType, value.SourceType)
+			check.equal(result.Uri, value.Uri)
+		end)
+
+		test.case("error on unsupported Content SourceType (Object)", function()
+			local mockContent = {
+				SourceType = roblox.Enum.ContentSourceType.Object
+			}
+			local w = Writer.new()
+			local success = pcall(function()
+				content.write(w, mockContent :: any)
+			end)
+			check.equal(success, false)
 		end)
 	end)
 end

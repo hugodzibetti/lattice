@@ -64,5 +64,17 @@ return function()
 			local result = roundTrip(value)
 			check.equal(result.Number, value.Number)
 		end)
+
+		test.case("palette boundary and fallback cases", function()
+			local cases = {
+				roblox.BrickColor.new(1),
+				roblox.BrickColor.new(1032),
+				roblox.BrickColor.new(194),
+			}
+			for _, value in cases do
+				local result = roundTrip(value)
+				check.equal(result.Number, value.Number)
+			end
+		end)
 	end)
 end
