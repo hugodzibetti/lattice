@@ -342,6 +342,7 @@ writeArray(lines, "numberSequenceKeypoint", nskps, serializeNSK)
 writeArray(lines, "colorSequenceKeypoint", cskps, serializeCSK)
 writeArray(lines, "udim", udims, serializeUDim)
 writeArray(lines, "rect", rects, serializeRect)
+writeArray(lines, "enumItem", enumItems, serializeEnumItem)
 
 table.insert(lines, "}")
 

@@ -2,6 +2,8 @@
 --!native
 --!optimize 2
 
+math.randomseed(0)
+
 local Types = require("@src/types")
 local roblox = require("@lune/roblox")
 
@@ -40,14 +42,14 @@ export type Entry = {
 	samples: { any },
 }
 
-local samples = require("./fixtures/large-samples")
+local sampleOk, samples = pcall(require, "./fixtures/large-samples")
+if not sampleOk then
+	print("bench/fixtures/large-samples.luau not found — run: lune run bench/fixtures/Generate.luau")
+	os.exit(1)
+end
 
 -- enumItem is a factory, instantiate with Material
 local materialEnumItem = enumItem(roblox.Enum.Material)
-local enumItemSamples = {}
-for _, item in roblox.Enum.Material:GetEnumItems() do
-	table.insert(enumItemSamples, item)
-end
 
 -- synthetic codecs: faces, axes, array, option
 local syntheticFaces = {}
@@ -98,8 +100,12 @@ for _ = 1, 100 do
 end
 
 local syntheticOptions = {}
-for _ = 1, 100 do
-	table.insert(syntheticOptions, (math.random() - 0.5) * 2000)
+for i = 1, 100 do
+	if i % 5 == 0 then
+		table.insert(syntheticOptions, nil)
+	else
+		table.insert(syntheticOptions, (math.random() - 0.5) * 2000)
+	end
 end
 
 local uniqueIds = {}
@@ -132,7 +138,7 @@ local entries: { Entry } = {
 	{ name = "font", codec = font :: Codec<any>, samples = samples.font },
 	{ name = "content", codec = content :: Codec<any>, samples = samples.content },
 	{ name = "uniqueId", codec = uniqueId :: Codec<any>, samples = uniqueIds },
-	{ name = "enumItem", codec = materialEnumItem :: Codec<any>, samples = enumItemSamples },
+	{ name = "enumItem", codec = materialEnumItem :: Codec<any>, samples = samples.enumItem },
 	{ name = "array", codec = numberArray :: Codec<any>, samples = syntheticArrays },
 	{ name = "option", codec = optionalNumber :: Codec<any>, samples = syntheticOptions },
 }

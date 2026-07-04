@@ -60,7 +60,7 @@ local function run()
 			name = entry.name,
 			writeOpsPerSecond = writeResult.opsPerSecond,
 			readOpsPerSecond = readOps,
-			totalBytes = writeResult.totalBytes * ITERATIONS,
+			totalBytes = writeResult.totalBytes,
 			avgBytesPerValue = writeResult.totalBytes / n,
 			sampleCount = n,
 		})
