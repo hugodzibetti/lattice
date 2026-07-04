@@ -5,7 +5,7 @@ local Types = require("@src/types")
 local f32 = require("@src/serde/f32")
 local f64 = require("@src/serde/f64")
 local bool = require("@src/serde/bool")
-local string = require("@src/serde/string")
+local stringCodec = require("@src/serde/string")
 local array = require("@src/serde/array")
 local option = require("@src/serde/option")
 local cframe = require("@src/serde/cframe")
@@ -30,14 +30,13 @@ local uniqueId = require("@src/serde/uniqueId")
 local enumItem = require("@src/serde/enumItem")
 
 type Codec<T> = Types.Codec<T>
+type CodecFactory = (Codec<any>) -> Codec<any>
 
 local codecIdToModule: { [number]: Codec<any> } = {
 	[0] = f32 :: Codec<any>,
 	[1] = f64 :: Codec<any>,
 	[2] = bool :: Codec<any>,
-	[3] = string :: Codec<any>,
-	[4] = array :: Codec<any>,
-	[5] = option :: Codec<any>,
+	[3] = stringCodec :: Codec<any>,
 	[6] = cframe :: Codec<any>,
 	[7] = color3 :: Codec<any>,
 	[8] = brickColor :: Codec<any>,
@@ -58,6 +57,11 @@ local codecIdToModule: { [number]: Codec<any> } = {
 	[23] = content :: Codec<any>,
 	[24] = uniqueId :: Codec<any>,
 	[25] = enumItem :: Codec<any>,
+}
+
+local codecIdToFactory: { [number]: CodecFactory } = {
+	[4] = array :: CodecFactory,
+	[5] = option :: CodecFactory,
 }
 
 local codecNameToId: { [string]: number } = {
@@ -89,7 +93,14 @@ local codecNameToId: { [string]: number } = {
 	enumItem = 25,
 }
 
+export type SerdeRegistry = {
+	codecIdToModule: { [number]: Codec<any> },
+	codecIdToFactory: { [number]: CodecFactory },
+	codecNameToId: { [string]: number },
+}
+
 return {
 	codecIdToModule = codecIdToModule,
+	codecIdToFactory = codecIdToFactory,
 	codecNameToId = codecNameToId,
-}
+} :: SerdeRegistry
