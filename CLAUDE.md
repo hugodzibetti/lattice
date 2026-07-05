@@ -65,8 +65,8 @@ lune run tests/_scratch_run.luau  # see tests/*.spec.luau for pattern
 
 **Running**:
 
-- `pesde run test` loads all 20 test specs and runs them via frktest's lune reporter.
-- All specs wired into `scripts/RunTests.luau`: Buffer, Serde (11 types + Referent), Artifact, Format, Instance, Compat.
+- `pesde run test` loads all 21 test specs and runs them via frktest's lune reporter.
+- All specs wired into `scripts/RunTests.luau`: Buffer, Serde (11 types + Referent), Artifact, Format, Instance, Compat, Cli.
 
 ## Require Aliases
 
@@ -76,11 +76,12 @@ Defined in `.luaurc`:
 "aliases": {
   "src": "src",
   "packages": "lune_packages",
-  "tests": "tests"
+  "tests": "tests",
+  "cli": "cli"
 }
 ```
 
-Use `@src/buffer/Writer`, `@packages/frktest`, `@tests/SomeName` everywhere. This works natively under Lune; publishing to Roblox uses darklua to convert `@src/...` to relative paths.
+Use `@src/buffer/Writer`, `@packages/frktest`, `@tests/SomeName`, `@cli/SomeName` everywhere. This works natively under Lune; publishing to Roblox uses darklua to convert `@src/...` to relative paths (the `cli/` tree is dev tooling only, not part of the published Roblox package).
 
 ## Code Style
 
@@ -112,6 +113,7 @@ Use `@src/buffer/Writer`, `@packages/frktest`, `@tests/SomeName` everywhere. Thi
 3. ✅ **Instance layer** — `src/instance/` serializes/deserializes Roblox instances with default elision, instance dedup, and template detection.
 4. ✅ **Compat system** — `src/compat/` provides versioned schema registry with migration hooks.
 5. ✅ **Integration** — all 20 test specs wired; central serde registry at `src/serde/init.luau` (27 codecs + factories).
+6. ✅ **CLI Tooling** — `cli/` implements `lattice stats/dump/diff` per `docs/superpowers/specs/2026-07-05-cli-tooling-design.md`; wired as `pesde run lattice -- <subcommand> <args>`. `stats`/`dump` read `FormatData` directly (no instance deserialize); `diff` resolves both files via `src/instance/Deserializer.luau` and matches instances by `UniqueId` with positional-tree-order fallback, printing which strategy matched each instance.
 
 ## Current Work
 
@@ -125,6 +127,8 @@ Use `@src/buffer/Writer`, `@packages/frktest`, `@tests/SomeName` everywhere. Thi
 - **pesde**: Luau package manager; replaces wally for this project.
 - **lune**: Lua/Luau runtime; runs tests and build scripts outside of Roblox Studio.
 - **darklua**: AST processor; converts Luau `@alias/...` requires to relative paths for Roblox deployment. Config at `.darklua.json` (PR #17).
+- **Shared cost-estimator module**: per-column encoding cost math (`sizeRaw`/`sizeRle`/`sizeAllNonDefault`, plus `getValueSize`/`varintSize`/`runLengthEncode`) lives in `src/format/CostEstimator.luau`, extracted out of `src/instance/Serializer.luau` (which now just calls it) so `cli/Stats.luau`/`cli/Dump.luau` recompute the exact same per-column byte costs the serializer uses to pick encodings — single source of truth, no copy-pasted estimator logic between the CLI and the serializer.
+- **`data/artifact.bin` is gitignored**: it's generated locally/CI via `pesde run artifact`. Tests that need an `ArtifactData` (Instance/Format/Cli specs) use an in-memory mock artifact table instead of depending on this file, so `pesde run test` works without a build step.
 
 ## Updating This File
 
