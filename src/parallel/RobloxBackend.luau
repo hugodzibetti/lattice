@@ -18,12 +18,15 @@ export type RobloxBackend = {
 	decodeClassBlocksParallel: (payloads: { buffer }) -> { buffer },
 }
 
--- Returns true if running inside the real Roblox engine (where `task.desynchronize`
--- exists), false otherwise (e.g. under Lune, where it is nil). Pure existence
--- check on `task`; does NOT reference `script` or `game` here since those globals
--- don't exist when this module is required under Lune.
+-- Returns true if running inside the real Roblox engine (where `task` is a global
+-- with a `desynchronize` field), false otherwise (e.g. under Lune, where `task`
+-- isn't a global at all - only available via `require("@lune/task")` - so indexing
+-- it would raise "attempt to index nil"; pcall turns that into a clean `false`).
 local function isActorParallelAvailable(): boolean
-	return (task :: any).desynchronize ~= nil
+	local ok, hasDesynchronize = pcall(function()
+		return (task :: any).desynchronize ~= nil
+	end)
+	return ok and hasDesynchronize == true
 end
 
 local function runFallback(payloads: { buffer }, mode: "encode" | "decode"): { buffer }
