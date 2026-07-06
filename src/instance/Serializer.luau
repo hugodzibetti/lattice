@@ -372,7 +372,41 @@ local function serializeParallel(roots: { any }, artifact: ArtifactData): buffer
 	return outBuf
 end
 
+-- Below these thresholds, parallel's fixed per-worker process-spawn overhead
+-- (~40-70ms in Lune, see src/parallel/Worker.luau) outweighs any encode-time
+-- savings. Derived from bench/AutoDispatchSweep.luau: parallel only won (1.23x)
+-- at 9 classes / 18k instances; every smaller combination tried (2-9 classes,
+-- up to 10k instances) favored sequential, some by a wide margin. These are
+-- deliberately conservative - false negatives (staying sequential when
+-- parallel might have won) cost nothing; false positives cost 2-10x slowdown.
+local PARALLEL_MIN_CLASSES = 6
+local PARALLEL_MIN_INSTANCES = 12000
+
+-- Picks serialize() or serializeParallel() based on scene size, per the
+-- thresholds above. Runs one extra collectAll() pass to count instances/
+-- distinct classes before Stage A proper - negligible next to the encode
+-- work itself, especially at the scene sizes where the choice matters.
+local function serializeAuto(roots: { any }, artifact: ArtifactData): buffer
+	local list = collectAll(roots)
+
+	local seenClasses: { [string]: boolean } = {}
+	local numClasses = 0
+	for _, inst in list do
+		local className = inst.ClassName
+		if not seenClasses[className] then
+			seenClasses[className] = true
+			numClasses += 1
+		end
+	end
+
+	if numClasses >= PARALLEL_MIN_CLASSES and #list >= PARALLEL_MIN_INSTANCES then
+		return serializeParallel(roots, artifact)
+	end
+	return serialize(roots, artifact)
+end
+
 return {
 	serialize = serialize,
 	serializeParallel = serializeParallel,
+	serializeAuto = serializeAuto,
 }

@@ -428,7 +428,63 @@ local function deserializeParallel(data: buffer, artifact: ArtifactData): { any 
 	return buildInstancesFromFormatData(formatData, artifact)
 end
 
+-- Same thresholds as Serializer.serializeAuto (see that module for the
+-- benchmark this was derived from - parallel only won past 6+ classes and
+-- 12k+ total instances; smaller scenes lose to per-worker process-spawn
+-- overhead in Lune).
+local PARALLEL_MIN_CLASSES = 6
+local PARALLEL_MIN_INSTANCES = 12000
+
+-- Picks deserialize() or deserializeParallel() based on scene size. Only v4
+-- buffers carry enough info (length-prefixed blocks) to peek classId/
+-- instanceCount without a full parse; for any other version, deserialize()
+-- is the only valid choice anyway; deserializeParallel would raise "only
+-- supports format v4" (see comment on deserializeParallel above.
+local function deserializeAuto(data: buffer, artifact: ArtifactData): { any }
+	local r = BufferReader.new(data)
+
+	local m0 = r:u8()
+	local m1 = r:u8()
+	local m2 = r:u8()
+	local m3 = r:u8()
+	if not (m0 == 0x4C and m1 == 0x41 and m2 == 0x54 and m3 == 0x46) then
+		return deserialize(data, artifact)
+	end
+
+	local version = r:u16()
+	if version ~= 4 then
+		return deserialize(data, artifact)
+	end
+
+	local stringTableCount = r:varint()
+	for _ = 1, stringTableCount do
+		r:string()
+	end
+
+	local classBlockCount = r:varint()
+	local totalInstances = 0
+
+	for _ = 1, classBlockCount do
+		local blockLength = r:varint()
+		local bodyStart = r:pos()
+
+		local bodyBuf = buffer.create(blockLength)
+		buffer.copy(bodyBuf, 0, data, bodyStart, blockLength)
+		local peekReader = BufferReader.new(bodyBuf)
+		peekReader:varint() -- classId, unused here
+		totalInstances += peekReader:varint() -- instanceCount
+
+		r:bytes(blockLength)
+	end
+
+	if classBlockCount >= PARALLEL_MIN_CLASSES and totalInstances >= PARALLEL_MIN_INSTANCES then
+		return deserializeParallel(data, artifact)
+	end
+	return deserialize(data, artifact)
+end
+
 return {
 	deserialize = deserialize,
 	deserializeParallel = deserializeParallel,
+	deserializeAuto = deserializeAuto,
 }
