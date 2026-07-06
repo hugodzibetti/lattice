@@ -9,6 +9,7 @@ local FormatTypes = require("@src/format/types")
 local FormatWriter = require("@src/format/Writer")
 local BufferWriter = require("@src/buffer/Writer")
 local PropertyCompare = require("@src/instance/PropertyCompare")
+local CostEstimator = require("@src/format/CostEstimator")
 
 type ArtifactData = ArtifactTypes.ArtifactData
 type ClassBlock = FormatTypes.ClassBlock
@@ -37,48 +38,6 @@ local function collectAll(roots: { any }): { any }
 	end
 
 	return list
-end
-
-local function runLengthEncode(values: { any }): { { value: any, count: number } }
-	local runs = {}
-	if #values == 0 then
-		return runs
-	end
-	local currentVal = values[1]
-	local currentCount = 1
-	for i = 2, #values do
-		if values[i] == currentVal then
-			currentCount += 1
-		else
-			table.insert(runs, { value = currentVal, count = currentCount })
-			currentVal = values[i]
-			currentCount = 1
-		end
-	end
-	table.insert(runs, { value = currentVal, count = currentCount })
-	return runs
-end
-
-local function getValueSize(codec: any, val: any): number
-	local tempW = BufferWriter.new()
-	local ok = pcall(function()
-		codec.write(tempW, val)
-	end)
-	if ok then
-		return buffer.len(tempW:toBuffer())
-	else
-		return 0
-	end
-end
-
-local function varintSize(val: number): number
-	local size = 0
-	local temp = val
-	repeat
-		size += 1
-		temp = bit32.rshift(temp, 7)
-	until temp == 0
-	return size
 end
 
 local function serialize(roots: { any }, artifact: ArtifactData): buffer
@@ -258,34 +217,20 @@ local function serialize(roots: { any }, artifact: ArtifactData): buffer
 				colValues = {}
 				bitmask = table.create(effectiveCount, false)
 			else
-				-- Raw cost
-				local sizeRaw = math.ceil(effectiveCount / 8)
-				for _, v in nonDefaultValues do
-					sizeRaw += getValueSize(codec, v)
-				end
-				local minSize = sizeRaw
+				local minSize = CostEstimator.sizeRaw(codec, effectiveCount, nonDefaultValues)
 
-				-- RLE cost
-				local runs = runLengthEncode(nonDefaultValues)
-				local sizeRle = math.ceil(effectiveCount / 8) + varintSize(#runs)
-				for _, run in runs do
-					sizeRle += varintSize(run.count) + getValueSize(codec, run.value)
-				end
-
-				if sizeRle < minSize then
-					minSize = sizeRle
+				local rleCost = CostEstimator.sizeRle(codec, effectiveCount, nonDefaultValues)
+				if rleCost < minSize then
+					minSize = rleCost
 					encoding = 1
 					colValues = nonDefaultValues
 				end
 
 				-- AllNonDefault cost
 				if nonDefaultCount == effectiveCount then
-					local sizeAllNonDefault = 0
-					for _, v in allValues do
-						sizeAllNonDefault += getValueSize(codec, v)
-					end
-					if sizeAllNonDefault < minSize then
-						minSize = sizeAllNonDefault
+					local allNonDefaultCost = CostEstimator.sizeAllNonDefault(codec, allValues)
+					if allNonDefaultCost < minSize then
+						minSize = allNonDefaultCost
 						encoding = 4
 						colValues = allValues
 						bitmask = table.create(effectiveCount, true)
@@ -310,7 +255,7 @@ local function serialize(roots: { any }, artifact: ArtifactData): buffer
 	end
 
 	local formatData: FormatData = {
-		version = 1,
+		version = 2,
 		stringTable = stringTable,
 		classBlocks = classBlocks,
 	}
