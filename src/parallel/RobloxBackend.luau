@@ -43,15 +43,20 @@ local function runActorParallel(payloads: { buffer }, mode: "encode" | "decode")
 		return {}
 	end
 
-	-- `script` here is this RobloxBackend ModuleScript; RobloxWorker is expected
-	-- to be its sibling Instance in the deployed tree.
+	-- `script` here is this RobloxBackend ModuleScript; RobloxWorker/Payload are
+	-- expected to be its sibling Instances in the deployed tree. Cloning Payload
+	-- alongside RobloxWorker into each worker Actor keeps them siblings after the
+	-- clone too, so RobloxWorker.luau's `require(script.Parent.Payload)` still
+	-- resolves once it's living under the new Actor instead of its original parent.
 	local workerTemplate = script.Parent.RobloxWorker :: Script
+	local payloadTemplate = script.Parent.Payload :: ModuleScript
 
 	local coordinator = Instance.new("Actor")
 	coordinator.Name = "ParallelCoordinator"
 	coordinator.Parent = workspace
 
 	local results: { buffer? } = table.create(n)
+	local errors: { string? } = table.create(n)
 	local doneEvent = Instance.new("BindableEvent")
 	local remaining = n
 
@@ -63,22 +68,61 @@ local function runActorParallel(payloads: { buffer }, mode: "encode" | "decode")
 		end
 	end)
 
-	local workers = table.create(n)
-	for index, payload in payloads do
+	coordinator:BindToMessage("Error", function(index: number, message: string)
+		errors[index] = message
+		remaining -= 1
+		if remaining == 0 then
+			doneEvent:Fire()
+		end
+	end)
+
+	-- Ready handshake: each worker replies "Ready" only once its parallel message
+	-- handlers are actually bound, closing the race where an "Encode"/"Decode"
+	-- message sent immediately after cloning could otherwise be dropped.
+	local readyRemaining = n
+	local readyEvent = Instance.new("BindableEvent")
+	coordinator:BindToMessage("Ready", function(_workerActor: Actor)
+		readyRemaining -= 1
+		if readyRemaining == 0 then
+			readyEvent:Fire()
+		end
+	end)
+
+	local workerActors = table.create(n)
+	for index, _ in payloads do
 		local workerActor = Instance.new("Actor")
 		workerActor.Name = "ParallelWorker_" .. tostring(index)
 		workerActor.Parent = coordinator
+
+		payloadTemplate:Clone().Parent = workerActor
 
 		local workerScript = workerTemplate:Clone()
 		workerScript.Parent = workerActor
 		workerScript.Enabled = true
 
-		workers[index] = workerActor
-		workerActor:SendMessage(mode, coordinator, index, payload)
+		workerActors[index] = workerActor
+		workerActor:SendMessage("Init", coordinator)
+	end
+
+	if readyRemaining > 0 then
+		readyEvent.Event:Wait()
+	end
+	readyEvent:Destroy()
+
+	for index, payload in payloads do
+		workerActors[index]:SendMessage(mode, coordinator, index, payload)
 	end
 
 	if remaining > 0 then
 		doneEvent.Event:Wait()
+	end
+	doneEvent:Destroy()
+
+	for i = 1, n do
+		if errors[i] then
+			coordinator:Destroy()
+			error(string.format("Roblox Actor parallel %s failed at index %d: %s", mode, i, errors[i] :: string))
+		end
 	end
 
 	local out: { buffer } = table.create(n)
