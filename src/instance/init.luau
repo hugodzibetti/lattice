@@ -4,5 +4,6 @@ local Deserializer = require("@src/instance/Deserializer")
 
 return {
 	serialize = Serializer.serialize,
+	serializeParallel = Serializer.serializeParallel,
 	deserialize = Deserializer.deserialize,
 }
