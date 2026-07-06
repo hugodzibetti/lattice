@@ -336,7 +336,7 @@ local function serialize(roots: { any }, artifact: ArtifactData): buffer
 	end
 
 	local formatData: FormatData = {
-		version = 1,
+		version = 2,
 		stringTable = stringTable,
 		classBlocks = classBlocks,
 	}
