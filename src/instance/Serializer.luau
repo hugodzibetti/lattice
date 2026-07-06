@@ -7,6 +7,8 @@ local Types = require("@src/types")
 local ArtifactTypes = require("@src/artifacts/types")
 local FormatTypes = require("@src/format/types")
 local FormatWriter = require("@src/format/Writer")
+local BufferWriter = require("@src/buffer/Writer")
+local PropertyCompare = require("@src/instance/PropertyCompare")
 local CostEstimator = require("@src/format/CostEstimator")
 
 type ArtifactData = ArtifactTypes.ArtifactData
@@ -119,34 +121,7 @@ local function serialize(roots: { any }, artifact: ArtifactData): buffer
 			local isDefaults = table.create(numBucket)
 
 			for i, inst in bucket do
-				local ok, val = pcall(function()
-					return inst[pm.name]
-				end)
-				if not ok then
-					val = nil
-				end
-
-				local serializedVal = val
-				local isDefault = false
-
-				if pm.codecId == 25 then -- Enum
-					if typeof(val) == "EnumItem" then
-						serializedVal = val.Value
-					elseif type(val) == "number" then
-						serializedVal = val
-					end
-					isDefault = (serializedVal == pm.default)
-				elseif pm.codecId == 26 then -- Referent
-					local targetId = 0
-					if val then
-						targetId = globalIdMap[val:GetDebugId()] or 0
-					end
-					serializedVal = targetId
-					isDefault = (serializedVal == 0)
-				else
-					isDefault = (val == pm.default)
-				end
-
+				local serializedVal, isDefault = PropertyCompare.computeSerializedValue(inst, pm, globalIdMap)
 				serializedVals[i] = serializedVal
 				isDefaults[i] = isDefault
 			end

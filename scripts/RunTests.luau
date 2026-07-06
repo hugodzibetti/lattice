@@ -24,6 +24,7 @@ require("@tests/Format.spec")()
 require("@tests/Instance.spec")()
 require("@tests/Cli.spec")()
 require("@tests/SchemaEvolution.spec")()
+require("@tests/Patch.spec")()
 
 local lune_console_reporter = (frktest :: any)._reporters.lune_console_reporter
 lune_console_reporter.init()
