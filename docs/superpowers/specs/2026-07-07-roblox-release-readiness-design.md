@@ -23,24 +23,65 @@ Additionally, `origin/master` is currently missing `cli/`, `src/patch/`, and `sr
 
 ## Design
 
-### 1. `@lune/roblox` and `@lune/task` shim via darklua
+### 1. `@lune/roblox` and `@lune/task` shim via darklua, behind one named seam
 
-`.darklua.json`'s existing `convert_require` rule already maps the `@src` alias prefix to a real directory (`sources: { "@src": "./src" }`). The same `path`-mode `sources` mechanism accepts additional prefixes, so `require("@lune/roblox")` (parsed as package `@lune`, subpath `roblox`) can be redirected the same way:
+The darklua rewrite (below) is invisible if it's scattered across 20+ raw `require("@lune/roblox")` call sites — nothing in `src/serde/color3.luau` would tell a reader that this require gets swapped at build time. Instead, confine it to two small, clearly-named modules that everything else depends on:
+
+```
+src/
+├── RobloxTypes.luau         -- the ONE file that says require("@lune/roblox")
+├── LuneTask.luau             -- the ONE file that says require("@lune/task")
+├── serde/
+│   └── color3.luau           -- require("@src/RobloxTypes"), never "@lune/roblox" directly
+└── instance/
+    ├── Serializer.luau        -- require("@src/RobloxTypes"), require("@src/LuneTask")
+    └── Deserializer.luau
+```
+
+`src/RobloxTypes.luau`:
+```luau
+-- Lune has no game engine, so it needs an explicit binding for Roblox datatypes;
+-- real Roblox has these as ambient globals instead. Under Lune this just forwards
+-- the real binding. For the Roblox build, darklua's @lune -> ./release-shims
+-- source mapping (.darklua.json) rewrites the require below to release-shims/roblox.luau,
+-- a table of the real engine globals — see that file for the swap.
+return require("@lune/roblox")
+```
+
+`src/LuneTask.luau` follows the same pattern for `require("@lune/task")`.
+
+Every codec and instance-layer file requires `@src/RobloxTypes` / `@src/LuneTask` like any other internal module — no build-magic string in sight. The magic itself still exists, but it now lives in exactly one place per binding, with a comment explaining it.
+
+The darklua side, unchanged from the original proposal: `.darklua.json`'s existing `convert_require` rule already maps `@src` to a real directory (`sources: { "@src": "./src" }`); the same mechanism accepts another prefix:
 
 ```json
 sources: { "@src": "./src", "@lune": "./release-shims" }
 ```
 
-Two new checked-in files, used only by the darklua build (never touched by Lune, which resolves `@lune/*` natively on its own):
+```
+release-shims/            -- only exists for the darklua build; Lune never touches this
+├── roblox.luau            -- return { Color3 = Color3, Vector3 = Vector3, Instance = Instance, Enum = Enum, ... }
+└── task.luau              -- return task
+```
 
-- `release-shims/roblox.luau` — returns a table of the real Roblox engine globals the codecs/instance layer actually use: `{ Color3 = Color3, Vector3 = Vector3, Vector2 = Vector2, CFrame = CFrame, Instance = Instance, Enum = Enum, UDim = UDim, UDim2 = UDim2, Rect = Rect, ... }` (exact field list = whatever `roblox.X` accesses currently exist across the codecs). Since every current use is `roblox.X.new(...)` or `roblox.Enum`, a flat table of globals slots in transparently — no call-site rewrites needed.
-- `release-shims/task.luau` — `return task` (already an ambient global in real Roblox).
+`pesde run test` and the CLI are unaffected — Lune resolves `@lune/roblox`/`@lune/task` through its own builtin binding inside `RobloxTypes.luau`/`LuneTask.luau`, never through `.darklua.json`.
 
-No edits to any file under `src/`. `pesde run test` and the CLI are unaffected because Lune resolves `@lune/roblox`/`@lune/task` through its own builtin binding, never through `.darklua.json`.
+### 2. Dev-only tooling moves out of `src/` entirely
 
-### 2. Exclude dev-only trees from the build
+Relying on `scripts/BuildPackage.luau` to remember an exclude-list (`src/artifacts/build/`, `src/parallel/Worker.luau`) is tribal knowledge that silently breaks the moment someone adds a new Lune-only file under `src/` and forgets to exclude it. Instead, make "everything under `src/` ships to Roblox" a structural fact by relocating the two Lune-only trees out of `src/`, next to `cli/` (which is already handled this way):
 
-`scripts/BuildPackage.luau` currently runs `darklua process src dist/lattice`. Change it to process only the publishable subset — exclude `src/artifacts/build/` and `src/parallel/Worker.luau` before invoking darklua (e.g. copy `src/` minus those paths into a staging dir, or pass explicit include paths if darklua's CLI supports it) — mirroring how `cli/` is already excluded by simply not being under `src/`.
+```
+lattice/
+├── src/                     -- everything here ships to Roblox, no exceptions, no exclude-list
+├── build-tools/
+│   └── artifacts/           -- moved from src/artifacts/build/; @lune/process, @lune/fs, @lune/serde stay raw (fine, never ships)
+│       ├── Run.luau
+│       └── buildArtifact.luau
+├── cli/                     -- unchanged
+│   └── Worker.luau          -- moved from src/parallel/Worker.luau (superseded Lune-process backend)
+```
+
+`scripts/BuildPackage.luau` then simply runs `darklua process src dist/lattice` unmodified — no exclude-list to maintain, because there's nothing under `src/` left to exclude. `pesde.toml`'s `[dependencies]`/require paths referencing the moved files (`src/artifacts/build/Run.luau` script entry, any `@src/artifacts/build/...` requires) need updating to their new `build-tools/` / `cli/` locations.
 
 ### 3. Two release channels from one build
 
@@ -58,5 +99,5 @@ Rebuild `dist/lattice/` with the above changes, sync via the existing Rojo proje
 ## Testing
 
 - Existing `pesde run test` suite must stay green (proves `src/` is untouched and still correct under Lune).
-- New: a lightweight check (script or manual step) that `dist/lattice/` contains zero `@lune` references after build, catching future regressions if a new codec/module adds an unshimmed `@lune/*` require.
+- New: a lightweight check (script or manual step) that `dist/lattice/` contains zero `@lune` references after build, catching future regressions if a new codec/module bypasses `RobloxTypes`/`LuneTask` and requires `@lune/*` directly.
 - `tests/studio-test.server.luau` passing in actual Studio is the release-readiness acceptance criterion.
