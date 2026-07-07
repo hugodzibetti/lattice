@@ -31,7 +31,10 @@ The darklua rewrite (below) is invisible if it's scattered across 20+ raw `requi
 src/
 ├── env/
 │   ├── RobloxTypes.luau      -- the ONE file that says require("@lune/roblox")
-│   └── LuneTask.luau          -- the ONE file that says require("@lune/task")
+│   ├── LuneTask.luau          -- the ONE file that says require("@lune/task")
+│   └── shims/                 -- darklua-only; Lune never touches this; lives right next to what it shims
+│       ├── roblox.luau        -- return { Color3 = Color3, Vector3 = Vector3, Instance = Instance, Enum = Enum, ... }
+│       └── task.luau          -- return task
 ├── serde/
 │   └── color3.luau            -- require("@src/env/RobloxTypes"), never "@lune/roblox" directly
 └── instance/
@@ -43,8 +46,8 @@ src/
 ```luau
 -- Lune has no game engine, so it needs an explicit binding for Roblox datatypes;
 -- real Roblox has these as ambient globals instead. Under Lune this just forwards
--- the real binding. For the Roblox build, darklua's @lune -> ./release-shims
--- source mapping (.darklua.json) rewrites the require below to release-shims/roblox.luau,
+-- the real binding. For the Roblox build, darklua's @lune -> ./src/env/shims
+-- source mapping (.darklua.json) rewrites the require below to src/env/shims/roblox.luau,
 -- a table of the real engine globals — see that file for the swap.
 return require("@lune/roblox")
 ```
@@ -53,19 +56,15 @@ return require("@lune/roblox")
 
 Every codec and instance-layer file requires `@src/env/RobloxTypes` / `@src/env/LuneTask` like any other internal module — no build-magic string in sight. The magic itself still exists, but it now lives in exactly one place per binding, with a comment explaining it.
 
-The darklua side, unchanged from the original proposal: `.darklua.json`'s existing `convert_require` rule already maps `@src` to a real directory (`sources: { "@src": "./src" }`); the same mechanism accepts another prefix:
+The darklua side, unchanged from the original proposal: `.darklua.json`'s existing `convert_require` rule already maps `@src` to a real directory (`sources: { "@src": "./src" }`); the same mechanism accepts another prefix, this time pointing at the nested `shims/` folder instead of a new top-level one:
 
 ```json
-sources: { "@src": "./src", "@lune": "./release-shims" }
+sources: { "@src": "./src", "@lune": "./src/env/shims" }
 ```
 
-```
-release-shims/            -- only exists for the darklua build; Lune never touches this; mirrors src/env/ 1:1 by filename
-├── roblox.luau            -- return { Color3 = Color3, Vector3 = Vector3, Instance = Instance, Enum = Enum, ... }
-└── task.luau              -- return task
-```
+No separate copy step is needed to get the shims into the release build: `BuildPackage.luau` already runs `darklua process src dist/lattice` over all of `src/`, so `src/env/shims/` is carried into `dist/lattice/env/shims/` for free, landing exactly where the rewritten require expects it.
 
-`pesde run test` and the CLI are unaffected — Lune resolves `@lune/roblox`/`@lune/task` through its own builtin binding inside `src/env/RobloxTypes.luau`/`LuneTask.luau`, never through `.darklua.json`.
+`pesde run test` and the CLI are unaffected — Lune resolves `@lune/roblox`/`@lune/task` through its own builtin binding inside `src/env/RobloxTypes.luau`/`LuneTask.luau`, never through `.darklua.json`; `src/env/shims/` sits unused (but harmless) under Lune since nothing there ever requires it directly.
 
 ### 2. Dev-only tooling moves into the existing Lune-only homes (`scripts/`, `cli/`), not a new top-level folder
 
