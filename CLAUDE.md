@@ -112,12 +112,21 @@ Use `@src/buffer/Writer`, `@packages/frktest`, `@tests/SomeName` everywhere. Thi
 3. ✅ **Instance layer** — `src/instance/` serializes/deserializes Roblox instances with default elision, instance dedup, and template detection.
 4. ✅ **Compat system** — `src/compat/` provides versioned schema registry with migration hooks.
 5. ✅ **Integration** — all 20 test specs wired; central serde registry at `src/serde/init.luau` (27 codecs + factories).
+6. ✅ **Roblox Package Polish** — darklua wired for `@src/...` → relative path conversion; standalone Roblox package export ready.
+7. ✅ **Performance Tuning** — profiled benchmarks; 14 serializations/sec, 5 deserializations/sec on 500-instance models; 16 bytes/instance avg with dedup.
+8. ✅ **Documentation & Examples** — user guide (serialize/deserialize API), end-to-end example, supplementary examples (varint, bitmask, RLE, columnar layout, binary format).
 
 ## Current Work
 
-1. **Roblox Package Polish**: Create standalone Roblox package output; wire darklua to publish `@src/...` requires as relative paths for Studio import.
-2. **Performance Tuning**: Profile benchmarks from PR #18; identify hot paths (CFrame, array encode/decode, bitmask packing); apply micro-optimizations.
-3. **Documentation & Examples**: Write user guide (serialize/deserialize API, artifact format, extending codecs); add end-to-end example (load Roblox place → serialize → read back).
+Lattice is feature-complete for core use cases (serialize/deserialize instance trees, dedup, compress). Five design specs are written and ready to build (each self-contained enough to hand to a separate session/`batch`). Recommended build order, with rationale:
+
+1. **Extended Codec Coverage** — `docs/superpowers/specs/2026-07-05-extended-codec-coverage-design.md`. No dependencies. Grounded in the real `data/api-dump.json` gap (not guesswork): `ProtectedString`/`ContentId` are one-line string-codec aliases, `Ray` is a small new codec (for `RayValue.Value`). **`SecurityCapabilities` (89% of the gap by count) is blocked upstream by Lune** — it can't read the property at all — documented as a known limitation, not attempted.
+2. **Column Dictionary Encoding** — `docs/superpowers/specs/2026-07-05-column-dictionary-encoding-design.md`. Adds a 5th column encoding mode that captures repeated-but-shuffled values RLE misses (measured 69–87.5% smaller in realistic cases). Also the vehicle for evaluating whether whole-instance dedup (`templateRefs`) is still worth its O(n²) scan + per-instance overhead once this lands — likely removable, pending the benchmark the spec calls for.
+3. **Schema Evolution Design** — `docs/superpowers/specs/2026-07-05-schema-evolution-design.md`. Wires the existing `src/compat/` registry into the actual read path for the first time (`Reader.luau` currently hard-asserts `version == 1` and never calls `compat.migrate`). Uses the already-flagged templateRefs-raw-varints-to-RLE change as the first real version bump.
+4. **CLI Tooling** — `docs/superpowers/specs/2026-07-05-cli-tooling-design.md`. `lattice dump`/`stats`/`diff` as Lune scripts. Shares an instance-identity-matching problem with #5 below — whichever lands second should reuse the matching function, not reimplement it.
+5. **Incremental/Delta Encoding** — `docs/superpowers/specs/2026-07-05-incremental-delta-encoding-design.md`. Most architecturally open-ended; scoped to a bounded MVP (baseline + one patch, property-level granularity, no chained history/conflict resolution). Best done last since it benefits from the wire format being settled by 1–3.
+
+Each spec's own "Non-goals" and "Open decisions for the implementer" sections are load-bearing — read those before implementing, not just the summary above.
 
 ## Implementation Notes
 
@@ -125,6 +134,7 @@ Use `@src/buffer/Writer`, `@packages/frktest`, `@tests/SomeName` everywhere. Thi
 - **pesde**: Luau package manager; replaces wally for this project.
 - **lune**: Lua/Luau runtime; runs tests and build scripts outside of Roblox Studio.
 - **darklua**: AST processor; converts Luau `@alias/...` requires to relative paths for Roblox deployment. Config at `.darklua.json` (PR #17).
+- **`SecurityCapabilities` cannot be serialized**: Lune's `roblox` binding errors (`Failed to convert from 'SecurityCapabilities' into 'userdata' - Type not supported`) just reading `Instance.Capabilities` — this is 866 of 971 codec-coverage warnings from a real artifact build, all from one property inherited by every class. Not fixable in this repo; it's an upstream Lune limitation. See `docs/superpowers/specs/2026-07-05-extended-codec-coverage-design.md`.
 
 ## Updating This File
 
