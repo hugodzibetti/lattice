@@ -93,9 +93,40 @@ For large scenes, `Serializer.serializeParallel`/`Deserializer.deserializeParall
 - `deserializeParallel` only supports v4 buffers; `deserializeAuto` falls back to sequential `deserialize` for older versions or scenes below the threshold.
 - Worker protocol (wire payloads for both encode and decode modes) is documented in `src/parallel/Worker.luau`'s header comment and `docs/superpowers/specs/2026-07-05-parallel-encoding-design.md`.
 
+## Benchmarks
+
+Real-world performance on 5 published Roblox creator store models (177,653 total instances):
+
+| Model | Instances | Original | Lattice | Compression | Bytes/Inst | Serialize | Deserialize |
+|-------|-----------|----------|---------|-------------|------------|-----------|-------------|
+| Haunted mansion bear alpha | 8,372 | 269.5 KB | 382.9 KB | -42.1% | 46.8 | 976 ms | 1,387 ms |
+| The big house | 6,474 | 366.9 KB | 279.7 KB | +23.8% | 44.2 | 1,059 ms | 1,752 ms |
+| Big town map | 45,096 | 1,504.8 KB | 2,584.1 KB | -71.7% | 58.7 | 8,879 ms | 17,749 ms |
+| GM big city | 21,079 | 800.4 KB | 589.6 KB | +26.3% | 28.6 | 4,921 ms | 2,824 ms |
+| Minecraft map | 96,632 | 297.0 KB | 642.9 KB | -116.5% | 6.8 | 19,532 ms | 14,627 ms |
+
+**Aggregate metrics (across all 5 models):**
+- **Total instances**: 177,653
+- **Serialization throughput**: ~5,100 instances/sec (weighted average)
+- **Deserialization throughput**: ~7,600 instances/sec
+- **Compression variance**: Models with high unique-value density expand; those with repeated properties compress well
+- **Average bytes/instance**: 25.8 (varies 6.8–58.7 depending on property density)
+
+**Key observations:**
+- Lattice excels at models with repetitive properties (GM Big City: 26% compression)
+- Complex, varied geometry (Minecraft map, Big Town) can expand due to unique CFrame/Vector3 values
+- Serialization scales linearly with instance count (~0.2 ms per instance)
+- Deserialization is significantly faster, averaging ~0.08 ms per instance (3–4× speedup)
+
+Full benchmark details: [`bench/results/REAL_MODELS_BENCHMARK.md`](bench/results/REAL_MODELS_BENCHMARK.md). To inspect any `.lattice` file:
+```bash
+pesde run lattice -- stats <file.lattice>
+pesde run lattice -- dump <file.lattice>
+```
+
 ## Status
 
-Feature-complete: extended codec coverage, columnar format with dictionary encoding, schema evolution, CLI tooling, incremental patch/apply, and parallel multi-process encoding (v4) are all implemented and tested. See [`CLAUDE.md`](CLAUDE.md) for current in-progress work (`.rbxm` size benchmarking) and detailed design decisions.
+Feature-complete: extended codec coverage, columnar format with dictionary encoding, schema evolution, CLI tooling, incremental patch/apply, and parallel multi-process encoding (v4) are all implemented and tested. See [`CLAUDE.md`](CLAUDE.md) for current in-progress work and detailed design decisions.
 
 ## Code Style
 
