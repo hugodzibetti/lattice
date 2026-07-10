@@ -3,7 +3,6 @@
 --!optimize 2
 
 local roblox = require("@src/robloxDatatypes")
-local task = require("@lune/task")
 local RobloxBackend = require("@src/parallel/RobloxBackend")
 local Types = require("@src/types")
 local ArtifactTypes = require("@src/artifacts/types")
@@ -345,6 +344,7 @@ local function deserializeParallel(data: buffer, artifact: ArtifactData): { any 
 			return deserialize(data, artifact)
 		end
 		local processModule = process :: any
+		local task = require("@lune/task") :: any
 
 		local decodedStrs: { string? } = table.create(n)
 		local errors: { string? } = table.create(n)
